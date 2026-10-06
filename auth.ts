@@ -1,26 +1,24 @@
-import NextAuth from "next-auth";
+﻿import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 
+import { authConfig } from "@/auth.config";
 import { prisma } from "@/lib/prisma";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
+
   adapter: PrismaAdapter(prisma),
 
   session: {
     strategy: "jwt",
   },
 
-  pages: {
-    signIn: "/login",
-  },
-
   providers: [
     Credentials({
       credentials: {
         email: {},
-
         password: {},
       },
 
@@ -35,13 +33,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           },
         });
 
-        if (!user) return null;
-
-        if (!user.password) return null;
+        if (!user || !user.password) {
+          return null;
+        }
 
         const passwordMatch = await bcrypt.compare(
           credentials.password as string,
-          user.password
+          user.password,
         );
 
         if (!passwordMatch) {
@@ -50,36 +48,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         return {
           id: user.id,
-
           name: user.name,
-
           email: user.email,
-
           role: user.role,
         };
       },
     }),
   ],
 
-callbacks: {
-  async jwt({ token, user }) {
-    if (user) {
-      token.id = user.id;
-      token.role = user.role;
-    }
+  callbacks: {
+    ...authConfig.callbacks,
 
-    return token;
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        token.role = user.role;
+      }
+
+      return token;
+    },
+
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id;
+        session.user.role = token.role;
+      }
+
+      return session;
+    },
   },
-
-  async session({ session, token }) {
-    if (session.user) {
-      session.user.id = token.id;
-      session.user.role = token.role;
-    }
-
-    return session;
-  },
-},
 
   secret: process.env.AUTH_SECRET,
 });
