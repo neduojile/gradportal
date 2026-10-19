@@ -91,8 +91,7 @@ export default function AdminSidebar({
   };
 
   const logout = async () => {
-    await signOut({ redirect: false });
-    window.location.assign("/login");
+    await signOut({ redirectTo: "/login" });
   };
 
   const closeMobile = () => setMobileOpen(false);
@@ -349,5 +348,6 @@ export default function AdminSidebar({
     </>
   );
 }
+
 
 
