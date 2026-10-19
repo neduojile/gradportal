@@ -4,6 +4,7 @@ import type { Session } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import DashboardHeader from "./dashboard-header";
 import DashboardSidebar from "./dashboard-sidebar";
+import GraduateBottomNav from "./GraduateBottomNav";
 
 interface DashboardShellProps {
   children: ReactNode;
@@ -25,7 +26,7 @@ export default async function DashboardShell({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-background to-orange-100/40 dark:from-zinc-950 dark:via-background dark:to-zinc-900">
-      <div className="mx-auto flex max-w-[1800px] gap-6 p-6">
+      <div className="mx-auto flex max-w-[1800px] gap-3 px-3 pb-24 pt-3 sm:gap-6 sm:p-6 sm:pb-24 lg:pb-6">
         <DashboardSidebar
           session={session}
           unreadNotifications={unreadNotifications}
@@ -45,3 +46,4 @@ export default async function DashboardShell({
     </div>
   );
 }
+
