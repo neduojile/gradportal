@@ -1,0 +1,770 @@
+
+===== C:\Users\HELLOW\gradportal\app\api\auth\[...nextauth]\route.ts =====
+import { handlers } from "@/auth";
+
+export const { GET, POST } = handlers;
+
+===== C:\Users\HELLOW\gradportal\lib\actions\application.actions.ts =====
+"use server";
+
+import { ApplicationStatus } from "@prisma/client";
+import { revalidatePath } from "next/cache";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
+const allowedTransitions: Record<ApplicationStatus, ApplicationStatus[]> = {
+  PENDING: ["UNDER_REVIEW", "REJECTED"],
+  UNDER_REVIEW: ["SHORTLISTED", "REJECTED"],
+  SHORTLISTED: ["ACCEPTED", "REJECTED"],
+  ACCEPTED: [],
+  REJECTED: [],
+};
+
+const labels: Record<ApplicationStatus, string> = {
+  PENDING: "Pending",
+  UNDER_REVIEW: "Under review",
+  SHORTLISTED: "Shortlisted",
+  ACCEPTED: "Accepted",
+  REJECTED: "Rejected",
+};
+
+export async function updateBusinessApplicationStatus(
+  applicationId: string,
+  nextStatus: ApplicationStatus,
+) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return { success: false, error: "Please sign in again." };
+  }
+
+  if (session.user.role !== "BUSINESS_OWNER") {
+    return { success: false, error: "You are not authorised to manage applicants." };
+  }
+
+  if (!Object.values(ApplicationStatus).includes(nextStatus)) {
+    return { success: false, error: "Invalid application status." };
+  }
+
+  const business = await prisma.businessProfile.findUnique({
+    where: { userId: session.user.id },
+    select: { id: true },
+  });
+
+  if (!business) {
+    return { success: false, error: "Complete your business profile first." };
+  }
+
+  const application = await prisma.application.findFirst({
+    where: {
+      id: applicationId,
+      job: { businessId: business.id },
+    },
+    select: {
+      id: true,
+      status: true,
+      applicantId: true,
+      jobId: true,
+      job: {
+        select: {
+          id: true,
+          title: true,
+          company: true,
+        },
+      },
+    },
+  });
+
+  if (!application) {
+    return { success: false, error: "Application not found for your company." };
+  }
+
+  if (application.status === nextStatus) {
+    return { success: false, error: "The application already has this status." };
+  }
+
+  if (!allowedTransitions[application.status].includes(nextStatus)) {
+    return {
+      success: false,
+      error: `You cannot move an application from ${labels[application.status]} to ${labels[nextStatus]}.`,
+    };
+  }
+
+  await prisma.$transaction([
+    prisma.application.update({
+      where: { id: application.id },
+      data: { status: nextStatus },
+    }),
+    prisma.notification.create({
+      data: {
+        userId: application.applicantId,
+        title: `Application ${labels[nextStatus]}`,
+        message: `Your application for ${application.job.title} at ${application.job.company} is now ${labels[nextStatus].toLowerCase()}.`,
+        type: "APPLICATION_STATUS",
+        link: "/applications",
+      },
+    }),
+  ]);
+
+  revalidatePath(`/business/jobs/${application.jobId}`);
+  revalidatePath(`/business/jobs/${application.jobId}/applicants`);
+  revalidatePath("/business/jobs");
+  revalidatePath("/applications");
+  revalidatePath("/notifications");
+
+  return {
+    success: true,
+    message: `Application moved to ${labels[nextStatus]}.`,
+  };
+}
+
+===== C:\Users\HELLOW\gradportal\lib\actions\auth.actions.ts =====
+
+===== C:\Users\HELLOW\gradportal\lib\actions\business-job.actions.ts =====
+"use server";
+
+import { EmploymentType } from "@prisma/client";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
+const employmentTypes = [
+  "FULL_TIME",
+  "PART_TIME",
+  "CONTRACT",
+  "INTERNSHIP",
+  "REMOTE",
+] as const;
+
+type CreateJobInput = {
+  title?: string;
+  category?: string;
+  description?: string;
+  requirements?: string;
+  location?: string;
+  deadline?: string;
+  employmentType?: string;
+  salary?: string;
+  skills?: string;
+};
+
+export async function createBusinessJob(input: CreateJobInput) {
+  const session = await auth();
+
+  if (!session?.user) {
+    return { success: false, message: "Please sign in to continue." };
+  }
+
+  if (session.user.role !== "BUSINESS_OWNER") {
+    return { success: false, message: "Only business owners can post jobs." };
+  }
+
+  const title = input.title?.trim() ?? "";
+  const category = input.category?.trim() ?? "";
+  const description = input.description?.trim() ?? "";
+  const requirements = input.requirements?.trim() ?? "";
+  const location = input.location?.trim() ?? "";
+  const salary = input.salary?.trim() ?? "";
+  const skills = input.skills?.trim() ?? "";
+  const deadline = input.deadline ? new Date(input.deadline) : null;
+  const employmentType = input.employmentType ?? "";
+
+  if (
+    title.length < 5 ||
+    category.length < 2 ||
+    description.length < 30 ||
+    requirements.length < 10 ||
+    location.length < 2
+  ) {
+    return {
+      success: false,
+      message: "Complete all required fields. Check the minimum lengths and try again.",
+    };
+  }
+
+  if (
+    !deadline ||
+    Number.isNaN(deadline.getTime()) ||
+    deadline.getTime() <= Date.now()
+  ) {
+    return {
+      success: false,
+      message: "Choose an application deadline in the future.",
+    };
+  }
+
+  if (!employmentTypes.includes(employmentType as (typeof employmentTypes)[number])) {
+    return {
+      success: false,
+      message: "Choose a valid employment type.",
+    };
+  }
+
+  const business = await prisma.businessProfile.findUnique({
+    where: { userId: session.user.id },
+    select: {
+      id: true,
+      companyName: true,
+      verificationStatus: true,
+    },
+  });
+
+  if (!business) {
+    return {
+      success: false,
+      message: "Complete your business profile before posting a job.",
+    };
+  }
+
+  if (business.verificationStatus !== "VERIFIED") {
+    return {
+      success: false,
+      message: "Your company must be verified before you can submit job listings.",
+    };
+  }
+
+  try {
+    const job = await prisma.job.create({
+      data: {
+        title,
+        category,
+        description,
+        requirements,
+        location,
+        deadline,
+        employmentType: employmentType as EmploymentType,
+        salary: salary || null,
+        skills: skills || null,
+        company: business.companyName,
+        createdById: session.user.id,
+        businessId: business.id,
+        status: "PENDING_APPROVAL",
+      },
+      select: { id: true },
+    });
+
+    revalidatePath("/business");
+    revalidatePath("/business/jobs");
+
+    return {
+      success: true,
+      message: "Job submitted for admin approval.",
+      jobId: job.id,
+    };
+  } catch (error) {
+    console.error("Business job creation failed:", error);
+
+    return {
+      success: false,
+      message: "We couldn't save this job. Please try again.",
+    };
+  }
+}
+
+type UpdateBusinessJobInput = CreateJobInput & {
+  jobId?: string;
+};
+
+export async function updateBusinessJob(input: UpdateBusinessJobInput) {
+  const session = await auth();
+
+  if (!session?.user) {
+    return { success: false, message: "Please sign in to continue." };
+  }
+
+  if (session.user.role !== "BUSINESS_OWNER") {
+    return { success: false, message: "Only business owners can edit jobs." };
+  }
+
+  const jobId = input.jobId?.trim() ?? "";
+  const title = input.title?.trim() ?? "";
+  const category = input.category?.trim() ?? "";
+  const description = input.description?.trim() ?? "";
+  const requirements = input.requirements?.trim() ?? "";
+  const location = input.location?.trim() ?? "";
+  const salary = input.salary?.trim() ?? "";
+  const skills = input.skills?.trim() ?? "";
+  const deadline = input.deadline ? new Date(input.deadline) : null;
+  const employmentType = input.employmentType ?? "";
+
+  if (!jobId) {
+    return { success: false, message: "Missing job listing ID." };
+  }
+
+  if (
+    title.length < 5 ||
+    category.length < 2 ||
+    description.length < 30 ||
+    requirements.length < 10 ||
+    location.length < 2
+  ) {
+    return {
+      success: false,
+      message: "Complete all required fields and check their minimum lengths.",
+    };
+  }
+
+  if (!deadline || Number.isNaN(deadline.getTime()) || deadline.getTime() <= Date.now()) {
+    return { success: false, message: "Choose an application deadline in the future." };
+  }
+
+  if (!employmentTypes.includes(employmentType as (typeof employmentTypes)[number])) {
+    return { success: false, message: "Choose a valid employment type." };
+  }
+
+  try {
+    const business = await prisma.businessProfile.findUnique({
+      where: { userId: session.user.id },
+      select: { id: true, companyName: true, verificationStatus: true },
+    });
+
+    if (!business) {
+      return { success: false, message: "Complete your company profile first." };
+    }
+
+    const existingJob = await prisma.job.findFirst({
+      where: { id: jobId, businessId: business.id },
+      select: { id: true, status: true },
+    });
+
+    if (!existingJob) {
+      return { success: false, message: "Job listing not found." };
+    }
+
+    if (existingJob.status === "CLOSED") {
+      return { success: false, message: "Closed listings cannot be edited." };
+    }
+
+    const updated = await prisma.job.update({
+      where: { id: existingJob.id },
+      data: {
+        title,
+        category,
+        description,
+        requirements,
+        location,
+        deadline,
+        employmentType: employmentType as EmploymentType,
+        salary: salary || null,
+        skills: skills || null,
+        company: business.companyName,
+        status:
+          existingJob.status === "REJECTED"
+            ? "PENDING_APPROVAL"
+            : existingJob.status,
+        reviewNotes: existingJob.status === "REJECTED" ? null : undefined,
+        reviewedAt: existingJob.status === "REJECTED" ? null : undefined,
+        reviewedById: existingJob.status === "REJECTED" ? null : undefined,
+      },
+      select: { id: true },
+    });
+
+    revalidatePath("/business");
+    revalidatePath("/business/jobs");
+    revalidatePath(`/business/jobs/${updated.id}`);
+    revalidatePath(`/business/jobs/${updated.id}/edit`);
+
+    return {
+      success: true,
+      message:
+        existingJob.status === "REJECTED"
+          ? "Job updated and resubmitted for administrator approval."
+          : "Job listing updated successfully.",
+      jobId: updated.id,
+    };
+  } catch (error) {
+    console.error("Business job update failed:", error);
+    return { success: false, message: "Couldn't update this listing. Please try again." };
+  }
+}
+
+export async function closeBusinessJob(jobId: string) {
+  const session = await auth();
+
+  if (!session?.user) {
+    return { success: false, message: "Please sign in to continue." };
+  }
+
+  if (session.user.role !== "BUSINESS_OWNER") {
+    return { success: false, message: "Only business owners can close jobs." };
+  }
+
+  if (!jobId?.trim()) {
+    return { success: false, message: "Missing job listing ID." };
+  }
+
+  try {
+    const business = await prisma.businessProfile.findUnique({
+      where: { userId: session.user.id },
+      select: { id: true },
+    });
+
+    if (!business) {
+      return { success: false, message: "Company profile not found." };
+    }
+
+    const result = await prisma.job.updateMany({
+      where: {
+        id: jobId,
+        businessId: business.id,
+        status: "OPEN",
+      },
+      data: { status: "CLOSED" },
+    });
+
+    if (result.count === 0) {
+      return {
+        success: false,
+        message: "Only your currently open listings can be closed.",
+      };
+    }
+
+    revalidatePath("/business");
+    revalidatePath("/business/jobs");
+    revalidatePath(`/business/jobs/${jobId}`);
+
+    return { success: true, message: "Job listing closed successfully." };
+  } catch (error) {
+    console.error("Business job closing failed:", error);
+    return { success: false, message: "Couldn't close this listing. Please try again." };
+  }
+}
+
+===== C:\Users\HELLOW\gradportal\lib\actions\business-profile.actions.ts =====
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
+const businessProfileSchema = z.object({
+  companyName: z.string().trim().min(2, "Enter your company name.").max(120),
+  registrationNumber: z.string().trim().max(100).optional(),
+  industry: z.string().trim().max(100).optional(),
+  description: z.string().trim().max(3000).optional(),
+  website: z.string().trim().max(255).optional(),
+  businessEmail: z.string().trim().email("Enter a valid business email.").max(255),
+  businessPhone: z.string().trim().max(40).optional(),
+  address: z.string().trim().max(255).optional(),
+});
+
+function optionalValue(value: FormDataEntryValue | null) {
+  const normalized = String(value ?? "").trim();
+  return normalized || undefined;
+}
+
+export async function saveBusinessProfile(formData: FormData) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return { success: false, message: "Please sign in to continue." };
+  }
+
+  if (session.user.role !== "BUSINESS_OWNER") {
+    return { success: false, message: "Only business owners can update this profile." };
+  }
+
+  const parsed = businessProfileSchema.safeParse({
+    companyName: formData.get("companyName"),
+    registrationNumber: optionalValue(formData.get("registrationNumber")),
+    industry: optionalValue(formData.get("industry")),
+    description: optionalValue(formData.get("description")),
+    website: optionalValue(formData.get("website")),
+    businessEmail: formData.get("businessEmail"),
+    businessPhone: optionalValue(formData.get("businessPhone")),
+    address: optionalValue(formData.get("address")),
+  });
+
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message ?? "Please check the information entered.",
+    };
+  }
+
+  const values = parsed.data;
+
+  if (values.website) {
+    try {
+      const url = new URL(
+        /^https?:\/\//i.test(values.website)
+          ? values.website
+          : `https://${values.website}`,
+      );
+
+      if (!url.hostname.includes(".")) {
+        throw new Error("Invalid website");
+      }
+
+      values.website = url.toString();
+    } catch {
+      return {
+        success: false,
+        message: "Enter a valid company website, such as https://example.com.",
+      };
+    }
+  }
+
+  try {
+    const existing = await prisma.businessProfile.findUnique({
+      where: { userId: session.user.id },
+      select: {
+        id: true,
+        companyName: true,
+        registrationNumber: true,
+        verificationStatus: true,
+      },
+    });
+
+    const identityDetailsChanged =
+      !!existing &&
+      (existing.companyName.trim() !== values.companyName.trim() ||
+        (existing.registrationNumber ?? "").trim() !==
+          (values.registrationNumber ?? "").trim());
+
+    const shouldResetVerification =
+      existing?.verificationStatus === "VERIFIED" && identityDetailsChanged;
+
+    await prisma.businessProfile.upsert({
+      where: { userId: session.user.id },
+      create: {
+        userId: session.user.id,
+        companyName: values.companyName,
+        registrationNumber: values.registrationNumber,
+        industry: values.industry,
+        description: values.description,
+        website: values.website,
+        businessEmail: values.businessEmail,
+        businessPhone: values.businessPhone,
+        address: values.address,
+        verificationStatus: "PENDING",
+      },
+      update: {
+        companyName: values.companyName,
+        registrationNumber: values.registrationNumber,
+        industry: values.industry,
+        description: values.description,
+        website: values.website,
+        businessEmail: values.businessEmail,
+        businessPhone: values.businessPhone,
+        address: values.address,
+        ...(shouldResetVerification
+          ? { verificationStatus: "PENDING" as const, verifiedAt: null }
+          : {}),
+      },
+    });
+
+    revalidatePath("/business");
+    revalidatePath("/business/profile");
+
+    return {
+      success: true,
+      message: shouldResetVerification
+        ? "Profile saved. Your company identity changes require verification again."
+        : "Company profile saved successfully.",
+    };
+  } catch (error) {
+    console.error("Saving business profile failed:", error);
+
+    return {
+      success: false,
+      message: "Unable to save your profile right now. Please try again.",
+    };
+  }
+}
+
+===== C:\Users\HELLOW\gradportal\lib\actions\job.actions.ts =====
+
+===== C:\Users\HELLOW\gradportal\lib\actions\register.ts =====
+"use server";
+
+import bcrypt from "bcryptjs";
+import { Prisma } from "@prisma/client";
+
+import { prisma } from "@/lib/prisma";
+import { registerSchema } from "@/lib/validations/auth";
+
+export async function registerUser(formData: unknown) {
+  const validatedFields = registerSchema.safeParse(formData);
+
+  if (!validatedFields.success) {
+    return {
+      success: false,
+      message: validatedFields.error.issues[0]?.message ?? "Please check your details.",
+    };
+  }
+
+  const { name, email, password, role, companyName } = validatedFields.data;
+  const normalizedEmail = email.toLowerCase();
+
+  try {
+    const existingUser = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true },
+    });
+
+    if (existingUser) {
+      return {
+        success: false,
+        message: "An account with this email already exists.",
+      };
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name,
+          email: normalizedEmail,
+          password: hashedPassword,
+          role,
+        },
+      });
+
+      if (role === "BUSINESS_OWNER") {
+        await tx.businessProfile.create({
+          data: {
+            userId: user.id,
+            companyName: companyName!,
+            businessEmail: normalizedEmail,
+            verificationStatus: "PENDING",
+          },
+        });
+      }
+    });
+
+    return {
+      success: true,
+      message:
+        role === "BUSINESS_OWNER"
+          ? "Business account created. Complete your business verification after signing in."
+          : "Account created successfully. You can now sign in.",
+    };
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return {
+        success: false,
+        message: "An account with these details already exists.",
+      };
+    }
+
+    console.error("Registration failed:", error);
+
+    return {
+      success: false,
+      message: "Something went wrong. Please try again.",
+    };
+  }
+}
+
+===== C:\Users\HELLOW\gradportal\lib\admin.ts =====
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
+export async function requireAdmin() {
+  const session = await auth();
+
+  if (!session || !session.user.id) {
+    redirect("/login");
+  }
+
+  if (session.user.role !== "ADMIN") {
+    redirect("/dashboard");
+  }
+
+  const account = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isActive: true, role: true },
+  });
+
+  if (!account || !account.isActive || account.role !== "ADMIN") {
+    redirect("/login?error=AccountInactive");
+  }
+
+  return session;
+}
+
+===== C:\Users\HELLOW\gradportal\lib\auth.ts =====
+
+===== C:\Users\HELLOW\gradportal\lib\auth\auth.ts =====
+
+===== C:\Users\HELLOW\gradportal\lib\graduate.ts =====
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
+export async function requireGraduate() {
+  const session = await auth();
+
+  if (!session || !session.user.id) {
+    redirect("/login");
+  }
+
+  if (session.user.role !== "GRADUATE") {
+    redirect("/admin");
+  }
+
+  const account = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isActive: true, role: true },
+  });
+
+  if (!account || !account.isActive) {
+    redirect("/login?error=AccountInactive");
+  }
+
+  if (account.role !== "GRADUATE") {
+    redirect("/login");
+  }
+
+  return session;
+}
+
+===== C:\Users\HELLOW\gradportal\lib\validations\auth.ts =====
+import { z } from "zod";
+
+export const loginSchema = z.object({
+  email: z.string().email("Please enter a valid email"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+export const registerSchema = z
+  .object({
+    name: z.string().trim().min(3, "Name must be at least 3 characters"),
+    email: z.string().trim().email("Please enter a valid email"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z.string(),
+    role: z.enum(["GRADUATE", "BUSINESS_OWNER"]).default("GRADUATE"),
+    companyName: z.string().trim().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.password !== data.confirmPassword) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["confirmPassword"],
+        message: "Passwords do not match",
+      });
+    }
+
+    if (data.role === "BUSINESS_OWNER" && (!data.companyName || data.companyName.length < 2)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["companyName"],
+        message: "Company name must be at least 2 characters",
+      });
+    }
+  });
+
+export type LoginSchema = z.infer<typeof loginSchema>;
+export type RegisterSchema = z.infer<typeof registerSchema>;

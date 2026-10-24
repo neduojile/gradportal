@@ -1,0 +1,310 @@
+﻿"use server";
+
+import { EmploymentType } from "@prisma/client";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
+const employmentTypes = [
+  "FULL_TIME",
+  "PART_TIME",
+  "CONTRACT",
+  "INTERNSHIP",
+  "REMOTE",
+] as const;
+
+type CreateJobInput = {
+  title?: string;
+  category?: string;
+  description?: string;
+  requirements?: string;
+  location?: string;
+  deadline?: string;
+  employmentType?: string;
+  salary?: string;
+  skills?: string;
+};
+
+export async function createBusinessJob(input: CreateJobInput) {
+  const session = await auth();
+
+  if (!session?.user) {
+    return { success: false, message: "Please sign in to continue." };
+  }
+
+  if (session.user.role !== "BUSINESS_OWNER") {
+    return { success: false, message: "Only business owners can post jobs." };
+  }
+
+  const title = input.title?.trim() ?? "";
+  const category = input.category?.trim() ?? "";
+  const description = input.description?.trim() ?? "";
+  const requirements = input.requirements?.trim() ?? "";
+  const location = input.location?.trim() ?? "";
+  const salary = input.salary?.trim() ?? "";
+  const skills = input.skills?.trim() ?? "";
+  const deadline = input.deadline ? new Date(input.deadline) : null;
+  const employmentType = input.employmentType ?? "";
+
+  if (
+    title.length < 5 ||
+    category.length < 2 ||
+    description.length < 30 ||
+    requirements.length < 10 ||
+    location.length < 2
+  ) {
+    return {
+      success: false,
+      message: "Complete all required fields. Check the minimum lengths and try again.",
+    };
+  }
+
+  if (
+    !deadline ||
+    Number.isNaN(deadline.getTime()) ||
+    deadline.getTime() <= Date.now()
+  ) {
+    return {
+      success: false,
+      message: "Choose an application deadline in the future.",
+    };
+  }
+
+  if (!employmentTypes.includes(employmentType as (typeof employmentTypes)[number])) {
+    return {
+      success: false,
+      message: "Choose a valid employment type.",
+    };
+  }
+
+  const business = await prisma.businessProfile.findUnique({
+    where: { userId: session.user.id },
+    select: {
+      id: true,
+      companyName: true,
+      verificationStatus: true,
+    },
+  });
+
+  if (!business) {
+    return {
+      success: false,
+      message: "Complete your business profile before posting a job.",
+    };
+  }
+
+  if (business.verificationStatus !== "VERIFIED") {
+    return {
+      success: false,
+      message: "Your company must be verified before you can submit job listings.",
+    };
+  }
+
+  try {
+    const job = await prisma.job.create({
+      data: {
+        title,
+        category,
+        description,
+        requirements,
+        location,
+        deadline,
+        employmentType: employmentType as EmploymentType,
+        salary: salary || null,
+        skills: skills || null,
+        company: business.companyName,
+        createdById: session.user.id,
+        businessId: business.id,
+        status: "PENDING_APPROVAL",
+      },
+      select: { id: true },
+    });
+
+    revalidatePath("/business");
+    revalidatePath("/business/jobs");
+
+    return {
+      success: true,
+      message: "Job submitted for admin approval.",
+      jobId: job.id,
+    };
+  } catch (error) {
+    console.error("Business job creation failed:", error);
+
+    return {
+      success: false,
+      message: "We couldn't save this job. Please try again.",
+    };
+  }
+}
+
+type UpdateBusinessJobInput = CreateJobInput & {
+  jobId?: string;
+};
+
+export async function updateBusinessJob(input: UpdateBusinessJobInput) {
+  const session = await auth();
+
+  if (!session?.user) {
+    return { success: false, message: "Please sign in to continue." };
+  }
+
+  if (session.user.role !== "BUSINESS_OWNER") {
+    return { success: false, message: "Only business owners can edit jobs." };
+  }
+
+  const jobId = input.jobId?.trim() ?? "";
+  const title = input.title?.trim() ?? "";
+  const category = input.category?.trim() ?? "";
+  const description = input.description?.trim() ?? "";
+  const requirements = input.requirements?.trim() ?? "";
+  const location = input.location?.trim() ?? "";
+  const salary = input.salary?.trim() ?? "";
+  const skills = input.skills?.trim() ?? "";
+  const deadline = input.deadline ? new Date(input.deadline) : null;
+  const employmentType = input.employmentType ?? "";
+
+  if (!jobId) {
+    return { success: false, message: "Missing job listing ID." };
+  }
+
+  if (
+    title.length < 5 ||
+    category.length < 2 ||
+    description.length < 30 ||
+    requirements.length < 10 ||
+    location.length < 2
+  ) {
+    return {
+      success: false,
+      message: "Complete all required fields and check their minimum lengths.",
+    };
+  }
+
+  if (!deadline || Number.isNaN(deadline.getTime()) || deadline.getTime() <= Date.now()) {
+    return { success: false, message: "Choose an application deadline in the future." };
+  }
+
+  if (!employmentTypes.includes(employmentType as (typeof employmentTypes)[number])) {
+    return { success: false, message: "Choose a valid employment type." };
+  }
+
+  try {
+    const business = await prisma.businessProfile.findUnique({
+      where: { userId: session.user.id },
+      select: { id: true, companyName: true, verificationStatus: true },
+    });
+
+    if (!business) {
+      return { success: false, message: "Complete your company profile first." };
+    }
+
+    const existingJob = await prisma.job.findFirst({
+      where: { id: jobId, businessId: business.id },
+      select: { id: true, status: true },
+    });
+
+    if (!existingJob) {
+      return { success: false, message: "Job listing not found." };
+    }
+
+    if (existingJob.status === "CLOSED") {
+      return { success: false, message: "Closed listings cannot be edited." };
+    }
+
+    const updated = await prisma.job.update({
+      where: { id: existingJob.id },
+      data: {
+        title,
+        category,
+        description,
+        requirements,
+        location,
+        deadline,
+        employmentType: employmentType as EmploymentType,
+        salary: salary || null,
+        skills: skills || null,
+        company: business.companyName,
+        status:
+          existingJob.status === "REJECTED"
+            ? "PENDING_APPROVAL"
+            : existingJob.status,
+        reviewNotes: existingJob.status === "REJECTED" ? null : undefined,
+        reviewedAt: existingJob.status === "REJECTED" ? null : undefined,
+        reviewedById: existingJob.status === "REJECTED" ? null : undefined,
+      },
+      select: { id: true },
+    });
+
+    revalidatePath("/business");
+    revalidatePath("/business/jobs");
+    revalidatePath(`/business/jobs/${updated.id}`);
+    revalidatePath(`/business/jobs/${updated.id}/edit`);
+
+    return {
+      success: true,
+      message:
+        existingJob.status === "REJECTED"
+          ? "Job updated and resubmitted for administrator approval."
+          : "Job listing updated successfully.",
+      jobId: updated.id,
+    };
+  } catch (error) {
+    console.error("Business job update failed:", error);
+    return { success: false, message: "Couldn't update this listing. Please try again." };
+  }
+}
+
+export async function closeBusinessJob(jobId: string) {
+  const session = await auth();
+
+  if (!session?.user) {
+    return { success: false, message: "Please sign in to continue." };
+  }
+
+  if (session.user.role !== "BUSINESS_OWNER") {
+    return { success: false, message: "Only business owners can close jobs." };
+  }
+
+  if (!jobId?.trim()) {
+    return { success: false, message: "Missing job listing ID." };
+  }
+
+  try {
+    const business = await prisma.businessProfile.findUnique({
+      where: { userId: session.user.id },
+      select: { id: true },
+    });
+
+    if (!business) {
+      return { success: false, message: "Company profile not found." };
+    }
+
+    const result = await prisma.job.updateMany({
+      where: {
+        id: jobId,
+        businessId: business.id,
+        status: "OPEN",
+      },
+      data: { status: "CLOSED" },
+    });
+
+    if (result.count === 0) {
+      return {
+        success: false,
+        message: "Only your currently open listings can be closed.",
+      };
+    }
+
+    revalidatePath("/business");
+    revalidatePath("/business/jobs");
+    revalidatePath(`/business/jobs/${jobId}`);
+
+    return { success: true, message: "Job listing closed successfully." };
+  } catch (error) {
+    console.error("Business job closing failed:", error);
+    return { success: false, message: "Couldn't close this listing. Please try again." };
+  }
+}

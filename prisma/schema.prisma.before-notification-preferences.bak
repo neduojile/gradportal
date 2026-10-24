@@ -1,0 +1,363 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String                   @id @default(cuid())
+  name                String
+  email               String                   @unique
+  password            String?
+  role                Role                     @default(GRADUATE)
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  emailVerified       DateTime?
+  image               String?
+  isActive            Boolean                  @default(true)
+  applications        Application[]            @relation("ApplicantApplications")
+  auditLogs           AuditLog[]               @relation("AuditActor")
+  business            BusinessProfile?
+  emailTokens         EmailVerificationToken[]
+  ownerInterviews     Interview[]              @relation("OwnerInterviews")
+  scheduledInterviews Interview[]              @relation("InterviewScheduler")
+  seekerInterviews    Interview[]              @relation("SeekerInterviews")
+  createdJobs         Job[]                    @relation("JobCreator")
+  reviewedJobs        Job[]                    @relation("JobReviewer")
+  sentMessages        Message[]                @relation("MessageSender")
+  notifications       Notification[]
+  profile             Profile?
+  givenReviews        Review[]                 @relation("ReviewAuthor")
+  receivedReviews     Review[]                 @relation("ReviewTarget")
+  savedJobs           SavedJob[]
+  documents           VerificationDocument[]
+
+  @@index([role])
+  @@index([isActive])
+}
+
+model Profile {
+  id             String         @id @default(cuid())
+  phone          String?
+  careerField    String?
+  preferredRole  String?
+  qualification  Qualification?
+  location       String?
+  cvUrl          String?
+  profileImage   String?
+  userId         String         @unique
+  bio            String?
+  course         String?
+  githubUrl      String?
+  graduationYear Int?
+  linkedinUrl    String?
+  portfolioUrl   String?
+  university     String?
+  nyscStatus     NyscStatus     @default(NOT_PROVIDED)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BusinessProfile {
+  id                 String                 @id @default(cuid())
+  userId             String                 @unique
+  companyName        String
+  registrationNumber String?
+  industry           String?
+  description        String?
+  website            String?
+  businessEmail      String?
+  businessPhone      String?
+  address            String?
+  verificationStatus VerificationStatus     @default(PENDING)
+  verifiedAt         DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  user               User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs               Job[]
+  documents          VerificationDocument[] @relation("BusinessDocuments")
+
+  @@index([verificationStatus])
+}
+
+model VerificationDocument {
+  id                 String             @id @default(cuid())
+  userId             String
+  businessId         String?
+  type               DocumentType
+  fileUrl            String
+  originalFilename   String?
+  verificationStatus VerificationStatus @default(PENDING)
+  provider           String?
+  providerReference  String?
+  riskFlags          String?
+  adminNotes         String?
+  reviewedAt         DateTime?
+  reviewedById       String?
+  createdAt          DateTime           @default(now())
+  business           BusinessProfile?   @relation("BusinessDocuments", fields: [businessId], references: [id], onDelete: Cascade)
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, verificationStatus])
+  @@index([businessId])
+  @@index([type])
+}
+
+model Job {
+  id             String           @id @default(cuid())
+  title          String
+  category       String
+  description    String
+  requirements   String
+  location       String
+  deadline       DateTime
+  status         JobStatus        @default(PENDING_APPROVAL)
+  createdById    String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  company        String
+  employmentType EmploymentType   @default(FULL_TIME)
+  featured       Boolean          @default(false)
+  salary         String?
+  skills         String?
+  businessId     String?
+  reviewNotes    String?
+  reviewedAt     DateTime?
+  reviewedById   String?
+  applications   Application[]
+  business       BusinessProfile? @relation(fields: [businessId], references: [id])
+  createdBy      User             @relation("JobCreator", fields: [createdById], references: [id])
+  reviewedBy     User?            @relation("JobReviewer", fields: [reviewedById], references: [id])
+  savedBy        SavedJob[]
+
+  @@index([status])
+  @@index([category])
+  @@index([location])
+  @@index([deadline])
+  @@index([businessId])
+}
+
+model Application {
+  id           String            @id @default(cuid())
+  applicantId  String
+  jobId        String
+  status       ApplicationStatus @default(PENDING)
+  appliedAt    DateTime          @default(now())
+  coverLetter  String?
+  updatedAt    DateTime          @default(now()) @updatedAt
+  applicant    User              @relation("ApplicantApplications", fields: [applicantId], references: [id], onDelete: Cascade)
+  job          Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  conversation Conversation?
+
+  @@unique([applicantId, jobId])
+  @@index([status])
+  @@index([jobId])
+  @@index([applicantId])
+}
+
+model SavedJob {
+  id        String   @id @default(cuid())
+  userId    String
+  jobId     String
+  createdAt DateTime @default(now())
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobId])
+  @@index([userId])
+  @@index([jobId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  userId    String
+  createdAt DateTime @default(now())
+  link      String?
+  type      String   @default("GENERAL")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Conversation {
+  id            String      @id @default(cuid())
+  applicationId String      @unique
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  interviews    Interview[]
+  messages      Message[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  senderId       String?
+  type           MessageType  @default(TEXT)
+  content        String?
+  attachmentUrl  String?
+  attachmentName String?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User?        @relation("MessageSender", fields: [senderId], references: [id])
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+}
+
+model Interview {
+  id             String          @id @default(cuid())
+  conversationId String
+  seekerId       String
+  ownerId        String
+  scheduledById  String
+  scheduledAt    DateTime
+  durationMins   Int             @default(30)
+  status         InterviewStatus @default(SCHEDULED)
+  provider       String?
+  roomId         String?
+  roomUrl        String?
+  startedAt      DateTime?
+  endedAt        DateTime?
+  recordingUrl   String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  conversation   Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  owner          User            @relation("OwnerInterviews", fields: [ownerId], references: [id], onDelete: Cascade)
+  scheduledBy    User            @relation("InterviewScheduler", fields: [scheduledById], references: [id])
+  seeker         User            @relation("SeekerInterviews", fields: [seekerId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledAt])
+  @@index([seekerId])
+  @@index([ownerId])
+}
+
+model Review {
+  id            String   @id @default(cuid())
+  authorId      String
+  targetId      String
+  rating        Int
+  comment       String?
+  applicationId String?
+  createdAt     DateTime @default(now())
+  author        User     @relation("ReviewAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  target        User     @relation("ReviewTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([authorId, targetId, applicationId])
+  @@index([targetId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  targetType String
+  targetId   String
+  details    String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([createdAt])
+  @@index([targetType, targetId])
+}
+
+enum Role {
+  ADMIN
+  GRADUATE
+  BUSINESS_OWNER
+}
+
+enum JobStatus {
+  OPEN
+  CLOSED
+  PENDING_APPROVAL
+  REJECTED
+}
+
+enum ApplicationStatus {
+  PENDING
+  UNDER_REVIEW
+  SHORTLISTED
+  REJECTED
+  ACCEPTED
+}
+
+enum Qualification {
+  SSCE
+  OND
+  HND
+  BSC
+  BENG
+  BA
+  MSC
+  PHD
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  REMOTE
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  FLAGGED
+}
+
+enum DocumentType {
+  CV
+  ACADEMIC_CERTIFICATE
+  NYSC_CERTIFICATE
+  NYSC_EXEMPTION
+  NATIONAL_ID
+  CAC_CERTIFICATE
+  BUSINESS_PROOF
+  OTHER
+}
+
+enum NyscStatus {
+  NOT_PROVIDED
+  PENDING
+  VERIFIED
+  EXEMPTED
+  REJECTED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  DOCUMENT
+  VOICE_NOTE
+  SYSTEM
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  MISSED
+}
