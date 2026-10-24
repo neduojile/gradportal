@@ -42,6 +42,7 @@ export default async function AdminShell({
           </section>
         </main>
       </div>
+      <AdminBottomNav />
     </div>
   );
 }

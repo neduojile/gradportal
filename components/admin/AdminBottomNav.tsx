@@ -2,40 +2,54 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, BriefcaseBusiness, GraduationCap, FileText } from "lucide-react";
+import {
+  Home,
+  BriefcaseBusiness,
+  FileText,
+  Users,
+} from "lucide-react";
 
 const items = [
   { title: "Home", href: "/admin", icon: Home },
   { title: "Jobs", href: "/admin/jobs", icon: BriefcaseBusiness },
   { title: "Applications", href: "/admin/applications", icon: FileText },
-  { title: "Graduates", href: "/admin/graduates", icon: GraduationCap },
+  { title: "Users", href: "/admin/users", icon: Users },
 ];
 
 export default function AdminBottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed inset-x-3 bottom-3 z-[90] grid grid-cols-4 rounded-[25px] border border-slate-700/70 bg-zinc-950/95 p-2 shadow-2xl backdrop-blur-2xl lg:hidden">
-      {items.map(({ title, href, icon: Icon }) => {
-        const active = href === "/admin"
-          ? pathname === "/admin"
-          : pathname === href || pathname.startsWith(href + "/");
+    <nav
+      aria-label="Admin mobile navigation"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur-lg lg:hidden"
+    >
+      <div className="mx-auto grid max-w-lg grid-cols-4 gap-1">
+        {items.map((item) => {
+          const Icon = item.icon;
+          const active =
+            item.href === "/admin"
+              ? pathname === "/admin"
+              : pathname === item.href ||
+                pathname.startsWith(`${item.href}/`);
 
-        return (
-          <Link
-            key={href}
-            href={href}
-            className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-[19px] px-1 py-2.5 text-[10px] font-semibold transition-colors sm:text-xs ${
-              active
-                ? "bg-orange-500/20 text-orange-300"
-                : "text-slate-400 active:bg-white/5"
-            }`}
-          >
-            <Icon className="size-5" />
-            <span className="truncate">{title}</span>
-          </Link>
-        );
-      })}
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={active ? "page" : undefined}
+              className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold transition ${
+                active
+                  ? "bg-orange-50 text-orange-600"
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              <Icon className="h-5 w-5" />
+              <span>{item.title}</span>
+            </Link>
+          );
+        })}
+      </div>
     </nav>
   );
 }

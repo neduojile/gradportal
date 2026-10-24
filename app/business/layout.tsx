@@ -1,0 +1,53 @@
+﻿import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import BusinessSidebar from "@/components/business/business-sidebar";
+
+export default async function BusinessLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const session = await auth();
+
+  if (!session?.user) {
+    redirect("/login");
+  }
+
+  if (session.user.role !== "BUSINESS_OWNER") {
+    redirect(session.user.role === "ADMIN" ? "/admin" : "/dashboard");
+  }
+
+  if (!session.user.id) {
+    redirect("/login");
+  }
+
+  const currentUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isActive: true, role: true },
+  });
+
+  if (!currentUser || !currentUser.isActive) {
+    redirect("/login?error=AccountInactive");
+  }
+
+  if (currentUser.role !== "BUSINESS_OWNER") {
+    redirect("/login");
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="mx-auto flex max-w-[1680px] gap-5 px-3 py-3 sm:px-5 sm:py-5 lg:gap-6 lg:px-7">
+        <BusinessSidebar
+          name={session.user.name || "Business owner"}
+          email={session.user.email || ""}
+        />
+        <main className="min-w-0 flex-1 pt-14 lg:pt-0">{children}</main>
+      </div>
+    </div>
+  );
+}
+
+

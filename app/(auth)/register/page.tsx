@@ -5,11 +5,14 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import {
   ArrowRight,
   BriefcaseBusiness,
   CheckCircle2,
   Loader2,
+  UserRound,
+  Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -24,17 +27,22 @@ import { Input } from "@/components/ui/input";
 
 export default function RegisterPage() {
   const router = useRouter();
-
   const [isPending, startTransition] = useTransition();
 
   const {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
-  } = useForm<RegisterSchema>({
+  } = useForm<z.input<typeof registerSchema>, unknown, RegisterSchema>({
     resolver: zodResolver(registerSchema),
+    defaultValues: {
+      role: "GRADUATE",
+    },
   });
+
+  const accountRole = watch("role");
 
   const onSubmit = (data: RegisterSchema) => {
     startTransition(async () => {
@@ -46,20 +54,16 @@ export default function RegisterPage() {
       }
 
       toast.success(result.message);
-
       reset();
 
-      setTimeout(() => {
-        router.push("/login");
-      }, 1000);
+      router.push("/login");
     });
   };
 
   return (
     <main className="min-h-screen bg-[#fffaf5] text-slate-950">
-      <div className="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-4 py-6 sm:px-6 sm:py-6">
+      <div className="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-4 py-6 sm:px-6 sm:py-8">
         <div className="grid w-full overflow-hidden rounded-[32px] border border-orange-100 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.10)] lg:min-h-[680px] lg:grid-cols-2">
-
           <div className="relative hidden overflow-hidden bg-slate-950 p-8 text-white lg:flex lg:flex-col lg:justify-between xl:p-10">
             <div className="pointer-events-none absolute -right-32 -top-32 size-96 rounded-full bg-orange-500/20 blur-3xl" />
             <div className="pointer-events-none absolute -bottom-32 -left-32 size-96 rounded-full bg-orange-600/15 blur-3xl" />
@@ -69,12 +73,8 @@ export default function RegisterPage() {
                 <div className="flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600 text-lg font-black shadow-lg shadow-orange-500/20">
                   E
                 </div>
-
                 <div>
-                  <h2 className="text-xl font-bold tracking-tight">
-                    Employa
-                  </h2>
-
+                  <h2 className="text-xl font-bold tracking-tight">Employa</h2>
                   <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
                     Graduate Recruitment
                   </p>
@@ -90,21 +90,18 @@ export default function RegisterPage() {
 
               <h1 className="mt-5 text-5xl font-black leading-[1.02] tracking-tight xl:text-6xl">
                 Build your
-                <span className="block text-orange-500">
-                  next chapter.
-                </span>
+                <span className="block text-orange-500">next chapter.</span>
               </h1>
 
               <p className="mt-5 max-w-lg text-base leading-7 text-slate-400">
-                Create your Employa account, build your graduate profile, and
-                discover verified opportunities designed to move your career
-                forward.
+                Whether you are building your career or hiring your next
+                graduate, Employa brings opportunities and talent together.
               </p>
 
               <div className="mt-6 space-y-3">
-                <Benefit text="Discover verified graduate opportunities" />
-                <Benefit text="Track every application in one place" />
-                <Benefit text="Build a stronger professional profile" />
+                <Benefit text="Discover opportunities and professional talent" />
+                <Benefit text="Manage applications in one place" />
+                <Benefit text="Build meaningful professional connections" />
               </div>
             </div>
 
@@ -115,18 +112,13 @@ export default function RegisterPage() {
 
           <div className="flex items-center justify-center px-5 py-7 sm:px-10 md:px-12 lg:px-12 xl:px-14">
             <div className="w-full max-w-md">
-
               <div className="mb-6 lg:hidden">
                 <div className="flex items-center gap-3">
                   <div className="flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 font-black text-white shadow-lg shadow-orange-500/20">
                     E
                   </div>
-
                   <div>
-                    <h2 className="font-bold tracking-tight">
-                      Employa
-                    </h2>
-
+                    <h2 className="font-bold tracking-tight">Employa</h2>
                     <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
                       Graduate Recruitment
                     </p>
@@ -138,49 +130,105 @@ export default function RegisterPage() {
                 Create Account
               </div>
 
-              <h2 className="mt-4 text-4xl font-black tracking-tight text-slate-950">
+              <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
                 Start with Employa.
               </h2>
 
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                Create your account and take the first step toward your next
-                graduate opportunity.
+                Choose how you want to use the platform.
               </p>
 
-              <form
-                onSubmit={handleSubmit(onSubmit)}
-                className="mt-6 space-y-4"
-              >
-                <FormField
-                  label="Full Name"
-                  error={errors.name?.message}
-                >
+              <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-800">
+                    I want to join as
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <label
+                      className={`cursor-pointer rounded-2xl border p-4 transition ${
+                        accountRole === "GRADUATE"
+                          ? "border-orange-500 bg-orange-50 ring-1 ring-orange-500"
+                          : "border-slate-200 hover:border-orange-300"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        value="GRADUATE"
+                        className="sr-only"
+                        {...register("role")}
+                      />
+                      <UserRound className="mb-2 size-5 text-orange-600" />
+                      <span className="block text-sm font-bold">Job Seeker</span>
+                      <span className="mt-1 block text-xs leading-5 text-slate-500">
+                        Find jobs and manage applications
+                      </span>
+                    </label>
+
+                    <label
+                      className={`cursor-pointer rounded-2xl border p-4 transition ${
+                        accountRole === "BUSINESS_OWNER"
+                          ? "border-orange-500 bg-orange-50 ring-1 ring-orange-500"
+                          : "border-slate-200 hover:border-orange-300"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        value="BUSINESS_OWNER"
+                        className="sr-only"
+                        {...register("role")}
+                      />
+                      <Building2 className="mb-2 size-5 text-orange-600" />
+                      <span className="block text-sm font-bold">Business Owner</span>
+                      <span className="mt-1 block text-xs leading-5 text-slate-500">
+                        Recruit talent and post jobs
+                      </span>
+                    </label>
+                  </div>
+
+                  {errors.role && (
+                    <p className="mt-2 text-xs text-red-500">{errors.role.message}</p>
+                  )}
+                </div>
+
+                <FormField label="Full Name" error={errors.name?.message}>
                   <Input
+                    autoComplete="name"
                     placeholder="Enter your full name"
                     {...register("name")}
                     className="h-12 rounded-2xl border-slate-200 bg-slate-50/70 px-4 focus:border-orange-400 focus:ring-orange-400/20"
                   />
                 </FormField>
 
-                <FormField
-                  label="Email Address"
-                  error={errors.email?.message}
-                >
+                {accountRole === "BUSINESS_OWNER" && (
+                  <FormField
+                    label="Company Name"
+                    error={errors.companyName?.message}
+                  >
+                    <Input
+                      autoComplete="organization"
+                      placeholder="Enter your registered company name"
+                      {...register("companyName")}
+                      className="h-12 rounded-2xl border-slate-200 bg-slate-50/70 px-4 focus:border-orange-400 focus:ring-orange-400/20"
+                    />
+                  </FormField>
+                )}
+
+                <FormField label="Email Address" error={errors.email?.message}>
                   <Input
                     type="email"
+                    autoComplete="email"
                     placeholder="Enter your email"
                     {...register("email")}
                     className="h-12 rounded-2xl border-slate-200 bg-slate-50/70 px-4 focus:border-orange-400 focus:ring-orange-400/20"
                   />
                 </FormField>
 
-                <FormField
-                  label="Password"
-                  error={errors.password?.message}
-                >
+                <FormField label="Password" error={errors.password?.message}>
                   <Input
                     type="password"
-                    placeholder="Create a password"
+                    autoComplete="new-password"
+                    placeholder="Create a password (8+ characters)"
                     {...register("password")}
                     className="h-12 rounded-2xl border-slate-200 bg-slate-50/70 px-4 focus:border-orange-400 focus:ring-orange-400/20"
                   />
@@ -192,6 +240,7 @@ export default function RegisterPage() {
                 >
                   <Input
                     type="password"
+                    autoComplete="new-password"
                     placeholder="Confirm your password"
                     {...register("confirmPassword")}
                     className="h-12 rounded-2xl border-slate-200 bg-slate-50/70 px-4 focus:border-orange-400 focus:ring-orange-400/20"
@@ -201,7 +250,7 @@ export default function RegisterPage() {
                 <Button
                   type="submit"
                   disabled={isPending}
-                  className="h-12 w-full rounded-2xl bg-orange-500 font-bold text-white shadow-lg shadow-orange-500/20"
+                  className="h-12 w-full rounded-2xl bg-orange-500 font-bold text-white shadow-lg shadow-orange-500/20 hover:bg-orange-600"
                 >
                   {isPending ? (
                     <>
@@ -219,22 +268,17 @@ export default function RegisterPage() {
 
               <div className="mt-5 flex items-center justify-center gap-2 text-sm text-slate-500">
                 <span>Already have an account?</span>
-
-                <Link
-                  href="/login"
-                  className="font-bold text-orange-600"
-                >
+                <Link href="/login" className="font-bold text-orange-600">
                   Sign In
                 </Link>
               </div>
 
               <div className="mt-6 flex items-start gap-3 rounded-2xl border border-orange-100 bg-orange-50/60 p-4">
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-orange-500" />
-
                 <p className="text-xs leading-5 text-slate-500">
-                  Your account gives you access to graduate opportunities,
-                  applications, saved jobs, notifications, and your
-                  professional profile.
+                  {accountRole === "BUSINESS_OWNER"
+                    ? "Your business profile will start as pending verification. Complete the verification process before publishing jobs."
+                    : "Your account gives you access to job opportunities, applications, saved jobs, notifications, and your professional profile."}
                 </p>
               </div>
             </div>
@@ -251,7 +295,6 @@ function Benefit({ text }: { text: string }) {
       <div className="flex size-6 items-center justify-center rounded-full bg-orange-500/15 text-orange-400">
         <CheckCircle2 className="size-3.5" />
       </div>
-
       <span>{text}</span>
     </div>
   );
@@ -271,16 +314,11 @@ function FormField({
       <label className="mb-2 block text-sm font-semibold text-slate-800">
         {label}
       </label>
-
       {children}
-
       {error ? (
-        <p className="mt-2 text-xs font-medium text-red-500">
-          {error}
-        </p>
+        <p className="mt-2 text-xs font-medium text-red-500">{error}</p>
       ) : null}
     </div>
   );
 }
-
 

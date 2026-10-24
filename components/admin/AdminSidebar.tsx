@@ -27,41 +27,11 @@ interface AdminSidebarProps {
 }
 
 const navigation = [
-  {
-    title: "Dashboard",
-    href: "/admin",
-    icon: Home,
-  },
-  {
-    title: "Jobs",
-    href: "/admin/jobs",
-    icon: BriefcaseBusiness,
-  },
-  {
-    title: "Applications",
-    href: "/admin/applications",
-    icon: FileText,
-  },
-  {
-    title: "Graduates",
-    href: "/admin/graduates",
-    icon: GraduationCap,
-  },
-  {
-    title: "Reports",
-    href: "/admin/reports",
-    icon: BarChart3,
-  },
-  {
-    title: "Notifications",
-    href: "/admin/notifications",
-    icon: Bell,
-  },
-  {
-    title: "Settings",
-    href: "/admin/settings",
-    icon: Settings,
-  },
+  { title: "Platform Overview", href: "/admin", icon: Home },
+  { title: "Users & Businesses", href: "/admin/users", icon: Users },
+  { title: "Jobs & Listings", href: "/admin/jobs", icon: BriefcaseBusiness },
+  { title: "Applications & Activity", href: "/admin/applications", icon: FileText },
+  { title: "Reports, Support & Settings", href: "/admin/reports", icon: BarChart3 },
 ];
 
 export default function AdminSidebar({
@@ -348,6 +318,7 @@ export default function AdminSidebar({
     </>
   );
 }
+
 
 
 

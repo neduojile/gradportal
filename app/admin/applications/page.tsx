@@ -20,8 +20,55 @@ const statusLabels = {
   ACCEPTED: "Accepted",
 };
 
-export default async function AdminApplicationsPage() {
+export default async function AdminApplicationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; status?: string }>;
+}) {
   await requireAdmin();
+
+  const params = await searchParams;
+  const query = params.q?.trim() ?? "";
+  const validStatuses = [
+    "PENDING",
+    "UNDER_REVIEW",
+    "SHORTLISTED",
+    "REJECTED",
+    "ACCEPTED",
+  ] as const;
+  const selectedStatus = validStatuses.find(
+    (status) => status === params.status,
+  );
+
+  const where = {
+    ...(selectedStatus ? { status: selectedStatus } : {}),
+    ...(query
+      ? {
+          OR: [
+            {
+              applicant: {
+                name: { contains: query, mode: "insensitive" as const },
+              },
+            },
+            {
+              applicant: {
+                email: { contains: query, mode: "insensitive" as const },
+              },
+            },
+            {
+              job: {
+                title: { contains: query, mode: "insensitive" as const },
+              },
+            },
+            {
+              job: {
+                company: { contains: query, mode: "insensitive" as const },
+              },
+            },
+          ],
+        }
+      : {}),
+  };
 
   const [
     applications,
@@ -33,6 +80,7 @@ export default async function AdminApplicationsPage() {
     accepted,
   ] = await Promise.all([
     prisma.application.findMany({
+      where,
       include: {
         applicant: {
           select: {
@@ -130,21 +178,45 @@ export default async function AdminApplicationsPage() {
               </p>
             </div>
 
-            <div className="flex gap-3">
+            <form method="GET" className="flex flex-wrap gap-3">
               <input
-                placeholder="Search candidates..."
+                name="q"
+                defaultValue={query}
+                placeholder="Search candidate, email or job..."
+                aria-label="Search applications"
                 className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 lg:w-64"
               />
 
-              <select className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium outline-none focus:border-orange-400">
-                <option>All Status</option>
-                <option>Pending</option>
-                <option>Under Review</option>
-                <option>Shortlisted</option>
-                <option>Rejected</option>
-                <option>Accepted</option>
+              <select
+                name="status"
+                defaultValue={selectedStatus ?? ""}
+                aria-label="Filter by application status"
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium outline-none focus:border-orange-400"
+              >
+                <option value="">All Statuses</option>
+                <option value="PENDING">Pending</option>
+                <option value="UNDER_REVIEW">Under Review</option>
+                <option value="SHORTLISTED">Shortlisted</option>
+                <option value="REJECTED">Rejected</option>
+                <option value="ACCEPTED">Accepted</option>
               </select>
-            </div>
+
+              <button
+                type="submit"
+                className="h-11 rounded-2xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                Search
+              </button>
+
+              {(query || selectedStatus) && (
+                <a
+                  href="/admin/applications"
+                  className="inline-flex h-11 items-center rounded-2xl border border-slate-200 px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  Clear
+                </a>
+              )}
+            </form>
           </div>
         </div>
 

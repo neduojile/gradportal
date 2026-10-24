@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireGraduate } from "@/lib/graduate";
+import { sendEmail } from "@/lib/email";
 
 export async function submitApplication(
   jobId: string,
@@ -36,6 +37,14 @@ export async function submitApplication(
       status: true,
       deadline: true,
       company: true,
+      business: {
+        select: {
+          businessEmail: true,
+          user: {
+            select: { email: true, name: true, isActive: true },
+          },
+        },
+      },
     },
   });
 
@@ -99,6 +108,22 @@ export async function submitApplication(
       error:
         "We could not submit your application right now. Please try again.",
     };
+  }
+
+  const applicant = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { name: true, email: true },
+  });
+
+  const ownerEmail =
+    job.business?.businessEmail || job.business?.user.email;
+
+  if (ownerEmail && job.business?.user.isActive !== false) {
+    await sendEmail({
+      to: ownerEmail,
+      subject: `New application for ${job.title}`,
+      text: `A graduate has applied for your job on Employa.\n\nJob: ${job.title}\nApplicant: ${applicant?.name ?? session.user.name ?? "Graduate"}\nApplicant email: ${applicant?.email ?? session.user.email ?? "Not available"}\n\nSign in to Employa to review the application.`,
+    });
   }
 
   const admins = await prisma.user.findMany({

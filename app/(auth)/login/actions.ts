@@ -1,35 +1,45 @@
-"use server";
+﻿"use server";
 
-import { signIn } from "@/auth";
 import { AuthError } from "next-auth";
 
+import { signIn } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
 export async function login(formData: FormData) {
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const password = String(formData.get("password") ?? "");
+
+  if (!email || !password) {
+    return { error: "Please enter your email and password." };
+  }
 
   try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { role: true },
+    });
+
+    const redirectTo =
+      user?.role === "ADMIN"
+        ? "/admin"
+        : user?.role === "BUSINESS_OWNER"
+          ? "/business"
+          : "/dashboard";
+
     await signIn("credentials", {
       email,
       password,
-      redirectTo: "/dashboard",
+      redirectTo,
     });
 
-    return {
-      success: true,
-    };
+    return { success: true };
   } catch (error) {
     if (error instanceof AuthError) {
-      switch (error.type) {
-        case "CredentialsSignin":
-          return {
-            error: "Invalid email or password.",
-          };
-
-        default:
-          return {
-            error: "Something went wrong.",
-          };
+      if (error.type === "CredentialsSignin") {
+        return { error: "Invalid email or password." };
       }
+
+      return { error: "Something went wrong. Please try again." };
     }
 
     throw error;

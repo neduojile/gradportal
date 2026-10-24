@@ -21,6 +21,10 @@ export default async function DashboardLayout({
     redirect("/admin");
   }
 
+  if (session.user.role === "BUSINESS_OWNER") {
+    redirect("/business");
+  }
+
   return (
     <DashboardShell session={session}>
       {children}

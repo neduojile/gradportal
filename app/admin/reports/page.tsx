@@ -97,6 +97,15 @@ export default async function AdminReportsPage() {
         <p className="mt-2 text-sm text-muted-foreground">
           Real-time recruitment activity from your Employa database.
         </p>
+
+        <div className="mt-5">
+          <a
+            href="/admin/reports/export"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            Export applications CSV
+          </a>
+        </div>
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

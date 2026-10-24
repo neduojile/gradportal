@@ -59,7 +59,6 @@ export default function LoginPage() {
         router.replace("/dashboard");
       }
 
-      router.refresh();
     });
   };
 
@@ -186,6 +185,9 @@ export default function LoginPage() {
                     className="h-12 rounded-2xl border-slate-200 bg-slate-50/70 px-4 focus:border-orange-400 focus:ring-orange-400/20"
                   />
                 </FormField>
+                <div className="flex justify-end">
+                  <Link href="/forgot-password" className="text-sm font-medium text-orange-600 hover:underline">Forgot password?</Link>
+                </div>
 
                 <Button
                   type="submit"
@@ -270,4 +272,5 @@ function FormField({
     </div>
   );
 }
+
 

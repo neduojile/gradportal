@@ -33,7 +33,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           },
         });
 
-        if (!user || !user.password) {
+        if (!user || !user.password || !user.isActive) {
           return null;
         }
 
@@ -63,6 +63,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        token.accountDisabled = false;
+      }
+
+      if (token.id && !token.accountDisabled) {
+        const currentUser = await prisma.user.findUnique({
+          where: { id: String(token.id) },
+          select: { isActive: true, role: true },
+        });
+
+        if (!currentUser || !currentUser.isActive) {
+          token.accountDisabled = true;
+        } else {
+          token.role = currentUser.role;
+          token.accountDisabled = false;
+        }
       }
 
       return token;
@@ -70,7 +85,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id;
+        session.user.id = token.accountDisabled ? "" : token.id;
         session.user.role = token.role;
       }
 
@@ -80,3 +95,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
   secret: process.env.AUTH_SECRET,
 });
+
+
+
+
+

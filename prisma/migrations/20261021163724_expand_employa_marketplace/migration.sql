@@ -1,0 +1,292 @@
+-- CreateEnum
+CREATE TYPE "VerificationStatus" AS ENUM ('PENDING', 'VERIFIED', 'REJECTED', 'FLAGGED');
+
+-- CreateEnum
+CREATE TYPE "DocumentType" AS ENUM ('CV', 'ACADEMIC_CERTIFICATE', 'NYSC_CERTIFICATE', 'NYSC_EXEMPTION', 'NATIONAL_ID', 'CAC_CERTIFICATE', 'BUSINESS_PROOF', 'OTHER');
+
+-- CreateEnum
+CREATE TYPE "NyscStatus" AS ENUM ('NOT_PROVIDED', 'PENDING', 'VERIFIED', 'EXEMPTED', 'REJECTED');
+
+-- CreateEnum
+CREATE TYPE "MessageType" AS ENUM ('TEXT', 'IMAGE', 'DOCUMENT', 'VOICE_NOTE', 'SYSTEM');
+
+-- CreateEnum
+CREATE TYPE "InterviewStatus" AS ENUM ('SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'MISSED');
+
+-- AlterEnum
+-- This migration adds more than one value to an enum.
+-- With PostgreSQL versions 11 and earlier, this is not possible
+-- in a single migration. This can be worked around by creating
+-- multiple migrations, each migration adding only one value to
+-- the enum.
+
+
+
+-- AlterEnum
+
+-- DropIndex
+DROP INDEX "Notification_isRead_idx";
+
+-- DropIndex
+DROP INDEX "Notification_userId_idx";
+
+-- AlterTable
+ALTER TABLE "Application" ADD COLUMN     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+-- AlterTable
+ALTER TABLE "Job" ADD COLUMN     "businessId" TEXT,
+ADD COLUMN     "reviewNotes" TEXT,
+ADD COLUMN     "reviewedAt" TIMESTAMP(3),
+ADD COLUMN     "reviewedById" TEXT,
+ALTER COLUMN "status" SET DEFAULT 'PENDING_APPROVAL';
+
+-- AlterTable
+ALTER TABLE "Notification" ADD COLUMN     "link" TEXT,
+ADD COLUMN     "type" TEXT NOT NULL DEFAULT 'GENERAL';
+
+-- AlterTable
+ALTER TABLE "Profile" ADD COLUMN     "nyscStatus" "NyscStatus" NOT NULL DEFAULT 'NOT_PROVIDED';
+
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "isActive" BOOLEAN NOT NULL DEFAULT true;
+
+-- CreateTable
+CREATE TABLE "BusinessProfile" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "companyName" TEXT NOT NULL,
+    "registrationNumber" TEXT,
+    "industry" TEXT,
+    "description" TEXT,
+    "website" TEXT,
+    "businessEmail" TEXT,
+    "businessPhone" TEXT,
+    "address" TEXT,
+    "verificationStatus" "VerificationStatus" NOT NULL DEFAULT 'PENDING',
+    "verifiedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "BusinessProfile_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "VerificationDocument" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "businessId" TEXT,
+    "type" "DocumentType" NOT NULL,
+    "fileUrl" TEXT NOT NULL,
+    "originalFilename" TEXT,
+    "verificationStatus" "VerificationStatus" NOT NULL DEFAULT 'PENDING',
+    "provider" TEXT,
+    "providerReference" TEXT,
+    "riskFlags" TEXT,
+    "adminNotes" TEXT,
+    "reviewedAt" TIMESTAMP(3),
+    "reviewedById" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "VerificationDocument_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "EmailVerificationToken" (
+    "id" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "EmailVerificationToken_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Conversation" (
+    "id" TEXT NOT NULL,
+    "applicationId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Conversation_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Message" (
+    "id" TEXT NOT NULL,
+    "conversationId" TEXT NOT NULL,
+    "senderId" TEXT,
+    "type" "MessageType" NOT NULL DEFAULT 'TEXT',
+    "content" TEXT,
+    "attachmentUrl" TEXT,
+    "attachmentName" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Interview" (
+    "id" TEXT NOT NULL,
+    "conversationId" TEXT NOT NULL,
+    "seekerId" TEXT NOT NULL,
+    "ownerId" TEXT NOT NULL,
+    "scheduledById" TEXT NOT NULL,
+    "scheduledAt" TIMESTAMP(3) NOT NULL,
+    "durationMins" INTEGER NOT NULL DEFAULT 30,
+    "status" "InterviewStatus" NOT NULL DEFAULT 'SCHEDULED',
+    "provider" TEXT,
+    "roomId" TEXT,
+    "roomUrl" TEXT,
+    "startedAt" TIMESTAMP(3),
+    "endedAt" TIMESTAMP(3),
+    "recordingUrl" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Interview_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Review" (
+    "id" TEXT NOT NULL,
+    "authorId" TEXT NOT NULL,
+    "targetId" TEXT NOT NULL,
+    "rating" INTEGER NOT NULL,
+    "comment" TEXT,
+    "applicationId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Review_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "AuditLog" (
+    "id" TEXT NOT NULL,
+    "actorId" TEXT,
+    "action" TEXT NOT NULL,
+    "targetType" TEXT NOT NULL,
+    "targetId" TEXT NOT NULL,
+    "details" TEXT,
+    "ipAddress" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AuditLog_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "BusinessProfile_userId_key" ON "BusinessProfile"("userId");
+
+-- CreateIndex
+CREATE INDEX "BusinessProfile_verificationStatus_idx" ON "BusinessProfile"("verificationStatus");
+
+-- CreateIndex
+CREATE INDEX "VerificationDocument_userId_verificationStatus_idx" ON "VerificationDocument"("userId", "verificationStatus");
+
+-- CreateIndex
+CREATE INDEX "VerificationDocument_businessId_idx" ON "VerificationDocument"("businessId");
+
+-- CreateIndex
+CREATE INDEX "VerificationDocument_type_idx" ON "VerificationDocument"("type");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "EmailVerificationToken_token_key" ON "EmailVerificationToken"("token");
+
+-- CreateIndex
+CREATE INDEX "EmailVerificationToken_userId_idx" ON "EmailVerificationToken"("userId");
+
+-- CreateIndex
+CREATE INDEX "EmailVerificationToken_expiresAt_idx" ON "EmailVerificationToken"("expiresAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Conversation_applicationId_key" ON "Conversation"("applicationId");
+
+-- CreateIndex
+CREATE INDEX "Message_conversationId_createdAt_idx" ON "Message"("conversationId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "Message_senderId_idx" ON "Message"("senderId");
+
+-- CreateIndex
+CREATE INDEX "Interview_scheduledAt_idx" ON "Interview"("scheduledAt");
+
+-- CreateIndex
+CREATE INDEX "Interview_seekerId_idx" ON "Interview"("seekerId");
+
+-- CreateIndex
+CREATE INDEX "Interview_ownerId_idx" ON "Interview"("ownerId");
+
+-- CreateIndex
+CREATE INDEX "Review_targetId_idx" ON "Review"("targetId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Review_authorId_targetId_applicationId_key" ON "Review"("authorId", "targetId", "applicationId");
+
+-- CreateIndex
+CREATE INDEX "AuditLog_createdAt_idx" ON "AuditLog"("createdAt");
+
+-- CreateIndex
+CREATE INDEX "AuditLog_targetType_targetId_idx" ON "AuditLog"("targetType", "targetId");
+
+-- CreateIndex
+CREATE INDEX "Job_businessId_idx" ON "Job"("businessId");
+
+-- CreateIndex
+CREATE INDEX "Notification_userId_isRead_idx" ON "Notification"("userId", "isRead");
+
+-- CreateIndex
+CREATE INDEX "Notification_createdAt_idx" ON "Notification"("createdAt");
+
+-- CreateIndex
+CREATE INDEX "User_role_idx" ON "User"("role");
+
+-- CreateIndex
+CREATE INDEX "User_isActive_idx" ON "User"("isActive");
+
+-- AddForeignKey
+ALTER TABLE "BusinessProfile" ADD CONSTRAINT "BusinessProfile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "VerificationDocument" ADD CONSTRAINT "VerificationDocument_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "VerificationDocument" ADD CONSTRAINT "VerificationDocument_businessId_fkey" FOREIGN KEY ("businessId") REFERENCES "BusinessProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Job" ADD CONSTRAINT "Job_reviewedById_fkey" FOREIGN KEY ("reviewedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Job" ADD CONSTRAINT "Job_businessId_fkey" FOREIGN KEY ("businessId") REFERENCES "BusinessProfile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "EmailVerificationToken" ADD CONSTRAINT "EmailVerificationToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Conversation" ADD CONSTRAINT "Conversation_applicationId_fkey" FOREIGN KEY ("applicationId") REFERENCES "Application"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Message" ADD CONSTRAINT "Message_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Message" ADD CONSTRAINT "Message_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Interview" ADD CONSTRAINT "Interview_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Interview" ADD CONSTRAINT "Interview_seekerId_fkey" FOREIGN KEY ("seekerId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Interview" ADD CONSTRAINT "Interview_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Interview" ADD CONSTRAINT "Interview_scheduledById_fkey" FOREIGN KEY ("scheduledById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Review" ADD CONSTRAINT "Review_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Review" ADD CONSTRAINT "Review_targetId_fkey" FOREIGN KEY ("targetId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_actorId_fkey" FOREIGN KEY ("actorId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
