@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import DashboardUserMenu from "./dashboard-user-menu";
+import LiveNotificationBell from "@/components/notifications/live-notification-bell";
 
 interface DashboardHeaderProps {
   session: Session | null;
@@ -80,23 +81,7 @@ export default function DashboardHeader({
             />
           </div>
 
-          <Link
-            href="/notifications"
-            aria-label={
-              unreadNotifications > 0
-                ? `${unreadNotifications} unread notifications`
-                : "Notifications"
-            }
-            className="group relative flex size-11 items-center justify-center rounded-2xl border border-black/5 bg-white/80 shadow-sm active:scale-95 dark:border-white/10 dark:bg-zinc-900/70"
-          >
-            <Bell className="size-[18px]" />
-
-            {unreadNotifications > 0 ? (
-              <span className="absolute -right-1.5 -top-1.5 flex min-w-[21px] items-center justify-center rounded-full bg-orange-500 px-1.5 py-1 text-[10px] font-black leading-none text-white shadow-lg shadow-orange-500/30">
-                {unreadNotifications > 99 ? "99+" : unreadNotifications}
-              </span>
-            ) : null}
-          </Link>
+          <LiveNotificationBell />
 
           <DashboardUserMenu session={session} />
         </div>

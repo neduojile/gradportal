@@ -8,33 +8,35 @@ datasource db {
 }
 
 model User {
-  passwordResetTokens PasswordResetToken[]
-  id                  String                   @id @default(cuid())
-  name                String
-  email               String                   @unique
-  password            String?
-  role                Role                     @default(GRADUATE)
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
-  emailVerified       DateTime?
-  image               String?
-  isActive            Boolean                  @default(true)
-  applications        Application[]            @relation("ApplicantApplications")
-  auditLogs           AuditLog[]               @relation("AuditActor")
-  business            BusinessProfile?
-  emailTokens         EmailVerificationToken[]
-  ownerInterviews     Interview[]              @relation("OwnerInterviews")
-  scheduledInterviews Interview[]              @relation("InterviewScheduler")
-  seekerInterviews    Interview[]              @relation("SeekerInterviews")
-  createdJobs         Job[]                    @relation("JobCreator")
-  reviewedJobs        Job[]                    @relation("JobReviewer")
-  sentMessages        Message[]                @relation("MessageSender")
-  notifications       Notification[]
-  profile             Profile?
-  givenReviews        Review[]                 @relation("ReviewAuthor")
-  receivedReviews     Review[]                 @relation("ReviewTarget")
-  savedJobs           SavedJob[]
-  documents           VerificationDocument[]
+  passwordResetTokens           PasswordResetToken[]
+  id                            String                       @id @default(cuid())
+  name                          String
+  email                         String                       @unique
+  password                      String?
+  role                          Role                         @default(GRADUATE)
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
+  emailVerified                 DateTime?
+  image                         String?
+  isActive                      Boolean                      @default(true)
+  applications                  Application[]                @relation("ApplicantApplications")
+  auditLogs                     AuditLog[]                   @relation("AuditActor")
+  business                      BusinessProfile?
+  emailTokens                   EmailVerificationToken[]
+  ownerInterviews               Interview[]                  @relation("OwnerInterviews")
+  scheduledInterviews           Interview[]                  @relation("InterviewScheduler")
+  seekerInterviews              Interview[]                  @relation("SeekerInterviews")
+  createdJobs                   Job[]                        @relation("JobCreator")
+  reviewedJobs                  Job[]                        @relation("JobReviewer")
+  sentMessages                  Message[]                    @relation("MessageSender")
+  notifications                 Notification[]
+  profile                       Profile?
+  givenReviews                  Review[]                     @relation("ReviewAuthor")
+  receivedReviews               Review[]                     @relation("ReviewTarget")
+  savedJobs                     SavedJob[]
+  documents                     VerificationDocument[]
+  requestedApplicationDocuments ApplicationDocumentRequest[] @relation("DocumentRequester")
+  receivedApplicationDocuments  ApplicationDocumentRequest[] @relation("DocumentApplicant")
 
   @@index([role])
   @@index([isActive])
@@ -141,16 +143,17 @@ model Job {
 }
 
 model Application {
-  id           String            @id @default(cuid())
-  applicantId  String
-  jobId        String
-  status       ApplicationStatus @default(PENDING)
-  appliedAt    DateTime          @default(now())
-  coverLetter  String?
-  updatedAt    DateTime          @default(now()) @updatedAt
-  applicant    User              @relation("ApplicantApplications", fields: [applicantId], references: [id], onDelete: Cascade)
-  job          Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  conversation Conversation?
+  id               String                       @id @default(cuid())
+  applicantId      String
+  jobId            String
+  status           ApplicationStatus            @default(PENDING)
+  appliedAt        DateTime                     @default(now())
+  coverLetter      String?
+  updatedAt        DateTime                     @default(now()) @updatedAt
+  applicant        User                         @relation("ApplicantApplications", fields: [applicantId], references: [id], onDelete: Cascade)
+  job              Job                          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  conversation     Conversation?
+  documentRequests ApplicationDocumentRequest[]
 
   @@unique([applicantId, jobId])
   @@index([status])
@@ -186,7 +189,6 @@ model Notification {
   @@index([createdAt])
 }
 
-
 model PasswordResetToken {
   id        String   @id @default(cuid())
   tokenHash String   @unique
@@ -198,6 +200,7 @@ model PasswordResetToken {
   @@index([userId])
   @@index([expiresAt])
 }
+
 model EmailVerificationToken {
   id        String   @id @default(cuid())
   token     String   @unique
@@ -373,4 +376,31 @@ enum InterviewStatus {
   COMPLETED
   CANCELLED
   MISSED
+}
+
+model ApplicationDocumentRequest {
+  id               String    @id @default(cuid())
+  applicationId    String
+  requestedById    String
+  applicantId      String
+  title            String
+  instructions     String?
+  required         Boolean   @default(true)
+  status           String    @default("REQUESTED")
+  fileUrl          String?
+  fileKey          String?
+  originalFilename String?
+  submittedAt      DateTime?
+  reviewedAt       DateTime?
+  reviewNotes      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  requester   User        @relation("DocumentRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+  applicant   User        @relation("DocumentApplicant", fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([applicantId, status])
+  @@index([requestedById])
 }
